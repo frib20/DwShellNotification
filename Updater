@@ -6,7 +6,7 @@ $taskName = "AutoRemoteNotify"
 $dir = "C:\RemoteAdmin"
 $batPath = "C:\Windows\notify.bat"
 # Replace the URL below with your actual GitHub Raw URL for the installer
-$installUrl = "https://raw.githubusercontent.com/YourUsername/YourRepo/main/Install-AllInOne.ps1"
+$installUrl = "https://raw.githubusercontent.com/frib20/DwShellNotification/refs/heads/main/Installer"
 
 Write-Host "--- Starting Update/Reinstall Process ---" -ForegroundColor Cyan
 

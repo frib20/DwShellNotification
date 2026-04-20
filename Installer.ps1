@@ -13,60 +13,57 @@ $taskName = $GlobalConfig.ServiceName
 if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 icacls $dir /grant "Everyone:(OI)(CI)M" /T | Out-Null
 
-# --- 2. CREATE EVENT-DRIVEN LISTENER (No Polling Delay) ---
+# --- 2. CREATE STABLE LISTENER (Ultra-Fast Polling) ---
 $listenerContent = @"
 Add-Type -AssemblyName System.Windows.Forms
-`$dir = "$dir"
-`$triggerFile = "msg.txt"
-
+`$triggerFile = "$dir\msg.txt"
 `$n = New-Object System.Windows.Forms.NotifyIcon
 `$n.Icon = [System.Drawing.SystemIcons]::$($GlobalConfig.IconType)
 `$n.Visible = `$True
 
-# Event Watcher: This triggers the INSTANT the file hits the disk
-`$watcher = New-Object System.IO.FileSystemWatcher
-`$watcher.Path = `$dir
-`$watcher.Filter = `$triggerFile
-`$watcher.EnableRaisingEvents = `$true
+while(`$true) {
+    # Using the .NET method for speed
+    if ([System.IO.File]::Exists(`$triggerFile)) {
+        try {
+            # Direct file read with no locking
+            `$stream = [System.IO.File]::Open(`$triggerFile, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
+            `$reader = New-Object System.IO.StreamReader(`$stream)
+            `$message = `$reader.ReadToEnd().Trim()
+            `$reader.Close()
+            `$stream.Close()
 
-`$action = {
-    `$fullPath = `$Event.SourceEventArgs.FullPath
-    # Small delay to ensure CMD has finished writing the file
-    Start-Sleep -Milliseconds 20
-    if (Test-Path `$fullPath) {
-        `$message = [System.IO.File]::ReadAllText(`$fullPath).Trim()
-        if (`$message) {
-            `$n.ShowBalloonTip(10000, "$($GlobalConfig.Title)", `$message, [System.Windows.Forms.ToolTipIcon]::$($GlobalConfig.IconType))
-        }
-        [System.IO.File]::Delete(`$fullPath)
+            if (`$message) {
+                `$n.ShowBalloonTip(10000, "$($GlobalConfig.Title)", `$message, [System.Windows.Forms.ToolTipIcon]::$($GlobalConfig.IconType))
+            }
+        } catch {}
+        # Force delete immediately
+        [System.IO.File]::Delete(`$triggerFile)
     }
+    # 50ms is 20 checks per second - effectively instant
+    [System.Threading.Thread]::Sleep(50)
 }
-
-# Bind the event
-Register-ObjectEvent `$watcher "Created" -Action `$action | Out-Null
-
-# Keep the script alive silently
-while (`$true) { Start-Sleep -Seconds 3600 }
 "@
 Set-Content -Path $scriptPath -Value $listenerContent -Encoding UTF8
 
-# --- 3. CREATE NOTIFY.BAT (Optimized CMD Pipeline) ---
+# --- 3. CREATE NOTIFY.BAT ---
 $batContent = @'
 @echo off
 if "%~1"=="" exit /b
-:: Native CMD redirect is the fastest way to trigger the watcher
 (echo.%*) > C:\RemoteAdmin\msg.txt
 '@
 [System.IO.File]::WriteAllLines("C:\Windows\notify.bat", $batContent, [System.Text.Encoding]::ASCII)
 
-# --- 4. REGISTER & START ---
+# --- 4. REGISTER & START (Critical Session Fix) ---
+# We use 'Unregister' to kill any old hanging processes
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue | Out-Null
 
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$scriptPath"""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
+
+# IMPORTANT: Using 'Interactive' group ensures it pops up on the CURRENT user's screen
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 Start-ScheduledTask -TaskName $taskName
 
-Write-Host "--- Instant-Response Mode Active ---" -ForegroundColor Green
+Write-Host "--- Installation Complete ---" -ForegroundColor Green

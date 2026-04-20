@@ -39,8 +39,20 @@ while(`$true) {
 "@
 Set-Content -Path $scriptPath -Value $listenerContent -Encoding UTF8
 
-# --- 4. CREATE NOTIFY.BAT ---
-$batContent = "@echo off & setlocal enabledelayedexpansion & set 'msg=%*' & echo !msg! > $dir\msg.txt & echo [SUCCESS] Sent: !msg! & endlocal"
+# --- 4. CREATE NOTIFY.BAT (Enhanced for Symbols & Empty Messages) ---
+$batContent = @"
+@echo off
+setlocal enabledelayedexpansion
+set "msg=%*"
+if "!msg!"=="" (
+    echo [ERROR] No message provided.
+    exit /b
+)
+:: The parentheses around the echo prevent the "ECHO is off" bug
+(echo !msg!) > "$dir\msg.txt"
+echo [SUCCESS] Notification sent: "!msg!"
+endlocal
+"@
 Set-Content -Path "C:\Windows\notify.bat" -Value $batContent
 
 # --- 5. REGISTER TASK ---

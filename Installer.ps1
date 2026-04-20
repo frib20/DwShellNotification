@@ -39,21 +39,28 @@ while(`$true) {
 "@
 Set-Content -Path $scriptPath -Value $listenerContent -Encoding UTF8
 
-# --- 4. CREATE NOTIFY.BAT (Enhanced for Symbols & Empty Messages) ---
-$batContent = @"
+# --- 4. CREATE NOTIFY.BAT (The Final Fix) ---
+# We use single quotes @' '@ so PowerShell doesn't interfere with the CMD variables
+$batContent = @'
 @echo off
 setlocal enabledelayedexpansion
 set "msg=%*"
-if "!msg!"=="" (
+
+if not defined msg (
     echo [ERROR] No message provided.
     exit /b
 )
-:: The parentheses around the echo prevent the "ECHO is off" bug
-(echo !msg!) > "$dir\msg.txt"
+
+:: Using the (echo.!msg!) trick to bypass the "ECHO is off" state entirely
+:: We hardcode the path here to ensure there are no variable injection issues
+(echo.!msg!) > "C:\RemoteAdmin\msg.txt"
+
 echo [SUCCESS] Notification sent: "!msg!"
 endlocal
-"@
-Set-Content -Path "C:\Windows\notify.bat" -Value $batContent
+'@
+
+# Force the file creation with UTF8 to ensure CMD reads it correctly
+Set-Content -Path "C:\Windows\notify.bat" -Value $batContent -Encoding UTF8 -Force
 
 # --- 5. REGISTER TASK ---
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$scriptPath"""

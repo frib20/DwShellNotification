@@ -56,7 +56,7 @@ if not defined msg (
 (echo.!msg!) > "C:\RemoteAdmin\msg.txt"
 
 echo [SUCCESS] Notification sent: "!msg!"
-endlocal
+
 '@
 
 # Force the file creation with UTF8 to ensure CMD reads it correctly

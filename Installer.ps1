@@ -15,7 +15,7 @@ $taskName = $GlobalConfig.ServiceName
 
 if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 
-# --- 3. CREATE LISTENER (Using Config Variables) ---
+# --- 3. CREATE LISTENER ---
 $listenerContent = @"
 Add-Type -AssemblyName System.Windows.Forms
 `$triggerFile = "$dir\msg.txt"
@@ -39,30 +39,36 @@ while(`$true) {
 "@
 Set-Content -Path $scriptPath -Value $listenerContent -Encoding UTF8
 
-# --- 4. CREATE NOTIFY.BAT (The Final Fix) ---
-# We use single quotes @' '@ so PowerShell doesn't interfere with the CMD variables
+# --- 4. CREATE NOTIFY.BAT (Fixed: No Double-Write) ---
 $batContent = @'
 @echo off
-setlocal enabledelayedexpansion
-set "msg=%*"
-
-if not defined msg (
-    echo [ERROR] No message provided.
-    exit /b
-)
-
-:: Using the (echo.!msg!) trick to bypass the "ECHO is off" state entirely
-:: We hardcode the path here to ensure there are no variable injection issues
-(echo.!msg!) > "C:\RemoteAdmin\msg.txt"
-
-echo [SUCCESS] Notification sent: "!msg!"
-
+if "%*"=="" exit /b
+:: Direct CMD redirect to the file. No PowerShell calls here = No double trigger.
+(echo.%*) > C:\RemoteAdmin\msg.txt
+echo [SUCCESS] Notification sent (CMD): %*
 '@
 
-# Force the file creation with UTF8 to ensure CMD reads it correctly
-Set-Content -Path "C:\Windows\notify.bat" -Value $batContent -Encoding UTF8 -Force
+# We only use ASCII here. It is the most stable for CMD.
+[System.IO.File]::WriteAllLines("C:\Windows\notify.bat", $batContent, [System.Text.Encoding]::ASCII)
 
-# --- 5. REGISTER TASK ---
+# --- 5. CREATE POWERSHELL ALIAS ---
+$functionCode = @"
+function notify {
+    param([Parameter(ValueFromRemainingArguments=`$true)]`$RawMessage)
+    `$msg = `$RawMessage -join ' '
+    if (!`$msg) { return }
+    # Write directly to the file. PS uses this function, CMD uses the .bat file.
+    [System.IO.File]::WriteAllText("$dir\msg.txt", `$msg)
+    Write-Host "[SUCCESS] Notification sent (PS): `$msg" -ForegroundColor Green
+}
+"@
+
+$ManualProfile = "$HOME\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
+$profileDir = Split-Path $ManualProfile -Parent
+if (!(Test-Path $profileDir)) { New-Item -Type Directory -Path $profileDir -Force | Out-Null }
+Set-Content -Path $ManualProfile -Value $functionCode -Force
+
+# --- 6. REGISTER TASK ---
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$scriptPath"""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest

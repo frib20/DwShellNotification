@@ -1,0 +1,41 @@
+# Uninstall-RemoteNotify.ps1
+# This script removes all components of the Remote Notification System.
+
+$taskName = "AutoRemoteNotify"
+$dir = "C:\RemoteAdmin"
+$batPath = "C:\Windows\notify.bat"
+
+Write-Host "--- Starting System Cleanup ---" -ForegroundColor Cyan
+
+# 1. Stop and Delete the Scheduled Task
+if (Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue) {
+    Write-Host "[1/4] Stopping and removing Scheduled Task..." -ForegroundColor Yellow
+    Stop-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue
+    Unregister-ScheduledTask -TaskName $taskName -Confirm:$false
+} else {
+    Write-Host "[1/4] Scheduled Task not found. Skipping." -ForegroundColor Gray
+}
+
+# 2. Kill any running Listener processes
+# This ensures the .ps1 file isn't "locked" and can be deleted
+Write-Host "[2/4] Terminating background listener processes..." -ForegroundColor Yellow
+$activeProcs = Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { 
+    $_.CommandLine -like "*$dir\NotificationListener.ps1*" 
+}
+foreach ($proc in $activeProcs) {
+    Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue
+}
+
+# 3. Remove the Folder and Files
+if (Test-Path $dir) {
+    Write-Host "[3/4] Removing directory and scripts at $dir..." -ForegroundColor Yellow
+    Remove-Item -Recurse -Force $dir
+}
+
+# 4. Remove the 'notify' command
+if (Test-Path $batPath) {
+    Write-Host "[4/4] Removing notify.bat from C:\Windows..." -ForegroundColor Yellow
+    Remove-Item -Force $batPath
+}
+
+Write-Host "--- Cleanup Complete. System is ready for a fresh install. ---" -ForegroundColor Green

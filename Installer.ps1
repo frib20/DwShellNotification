@@ -1,21 +1,26 @@
-# 1. CLEANUP OLD STUFF
-Write-Host "Cleaning up old tasks and files..." -ForegroundColor Cyan
-$taskName = "AutoRemoteNotify"
-$dir = "C:\RemoteAdmin"
-Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
-if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
-if (Test-Path "C:\Windows\notify.bat") { Remove-Item -Force "C:\Windows\notify.bat" }
+# --- 1. LOAD CUSTOMIZATIONS ---
+$configUrl = "https://raw.githubusercontent.com/frib20/DwShellNotification/main/Config.ps1"
+try {
+    Invoke-RestMethod -Uri $configUrl | Invoke-Expression
+    Write-Host "Customizations loaded: $($GlobalConfig.Title)" -ForegroundColor Cyan
+} catch {
+    Write-Host "Failed to load Customization.ps1, using defaults." -ForegroundColor Yellow
+    $GlobalConfig = @{ Title="Remote Admin"; ServiceName="AutoRemoteNotify"; Folder="C:\RemoteAdmin"; IconType="Information" }
+}
 
-# 2. CREATE FOLDER
-New-Item -ItemType Directory -Path $dir -Force | Out-Null
+# --- 2. SETUP PATHS ---
+$dir = $GlobalConfig.Folder
+$scriptPath = "$dir\NotificationListener.ps1"
+$taskName = $GlobalConfig.ServiceName
 
-# 3. CREATE THE SMART LISTENER
-# This uses [System.IO.File] to read symbols exactly as they are written
+if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+
+# --- 3. CREATE LISTENER (Using Config Variables) ---
 $listenerContent = @"
 Add-Type -AssemblyName System.Windows.Forms
 `$triggerFile = "$dir\msg.txt"
 `$n = New-Object System.Windows.Forms.NotifyIcon
-`$n.Icon = [System.Drawing.SystemIcons]::Information
+`$n.Icon = [System.Drawing.SystemIcons]::$($GlobalConfig.IconType)
 `$n.Visible = `$True
 
 while(`$true) {
@@ -23,7 +28,7 @@ while(`$true) {
         try {
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
-                `$n.ShowBalloonTip(10000, "Remote Admin", `$message, [System.Windows.Forms.ToolTipIcon]::Info)
+                `$n.ShowBalloonTip(10000, "$($GlobalConfig.Title)", `$message, [System.Windows.Forms.ToolTipIcon]::$($GlobalConfig.IconType))
             }
         } finally {
             Remove-Item `$triggerFile -Force -ErrorAction SilentlyContinue
@@ -32,48 +37,18 @@ while(`$true) {
     Start-Sleep -Seconds 1
 }
 "@
-Set-Content -Path "$dir\NotificationListener.ps1" -Value $listenerContent -Encoding UTF8
+Set-Content -Path $scriptPath -Value $listenerContent -Encoding UTF8
 
-# 4. CREATE THE UNIVERSAL 'NOTIFY' COMMAND (CMD version)
-# Using delayed expansion to handle symbols like & ^ % ! in CMD
-$batContent = @'
-@echo off
-setlocal enabledelayedexpansion
-set "msg=%*"
-if not defined msg (echo [ERROR] No message provided. & exit /b)
-echo !msg! > C:\RemoteAdmin\msg.txt
-echo [SUCCESS] Notification sent: "!msg!"
-endlocal
-'@
+# --- 4. CREATE NOTIFY.BAT ---
+$batContent = "@echo off & setlocal enabledelayedexpansion & set 'msg=%*' & echo !msg! > $dir\msg.txt & echo [SUCCESS] Sent: !msg! & endlocal"
 Set-Content -Path "C:\Windows\notify.bat" -Value $batContent
 
-# 5. CREATE POWERSHELL PROFILE FUNCTION (PowerShell version)
-# This forces PowerShell to treat input as a literal string to avoid parser errors
-$profileDir = Split-Path $PROFILE -Parent
-if (!(Test-Path $profileDir)) { New-Item -Type Directory -Path $profileDir -Force }
-$functionCode = @"
-function notify {
-    param([Parameter(ValueFromRemainingArguments=`$true)]`$RawMessage)
-    `$msg = `$RawMessage -join ' '
-    if (!`$msg) { Write-Host "[ERROR] No message provided." -ForegroundColor Red; return }
-    [System.IO.File]::WriteAllText("$dir\msg.txt", `$msg)
-    Write-Host "[SUCCESS] Notification sent: `"`$msg`"" -ForegroundColor Green
-}
-"@
-Set-Content -Path $PROFILE -Value $functionCode
-
-# 6. REGISTER PERMANENT AUTO-START TASK
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
+# --- 5. REGISTER TASK ---
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$scriptPath"""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 Start-ScheduledTask -TaskName $taskName
 
-# 7. REFRESH CURRENT SESSION
-. $PROFILE
-
-Write-Host "`n--- SETUP COMPLETE ---" -ForegroundColor Green
-Write-Host "1. Works in CMD: notify !@#$%^&*()" -ForegroundColor White
-Write-Host "2. Works in PS:  notify '!@#$%^&*()'" -ForegroundColor White
-Write-Host "3. Persists through reboots." -ForegroundColor White
+Write-Host "Installation Complete: $taskName is running." -ForegroundColor Green

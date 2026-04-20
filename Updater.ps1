@@ -6,7 +6,7 @@ $taskName = "AutoRemoteNotify"
 $dir = "C:\RemoteAdmin"
 $batPath = "C:\Windows\notify.bat"
 # Replace the URL below with your actual GitHub Raw URL for the installer
-$installUrl = "https://raw.githubusercontent.com/frib20/DwShellNotification/refs/heads/main/Installer"
+$installUrl = "https://raw.githubusercontent.com/frib20/DwShellNotification/refs/heads/main/Installer.ps1"
 
 Write-Host "--- Starting Update/Reinstall Process ---" -ForegroundColor Cyan
 

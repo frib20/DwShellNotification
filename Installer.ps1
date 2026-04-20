@@ -39,16 +39,24 @@ while(`$true) {
 "@
 Set-Content -Path $scriptPath -Value $listenerContent -Encoding UTF8
 
-# --- 4. CREATE NOTIFY.BAT (Fixed: No Double-Write) ---
+# --- 4. CREATE NOTIFY.BAT (With Permission Fix) ---
+# First, ensure the folder exists and is writable by any process
+if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+icacls $dir /grant "Everyone:(OI)(CI)M" /T | Out-Null
+
 $batContent = @'
 @echo off
-if "%*"=="" exit /b
-:: Direct CMD redirect to the file. No PowerShell calls here = No double trigger.
+if "%~1"=="" exit /b
+:: Use %* to capture the full message and redirect to the buffer
 (echo.%*) > C:\RemoteAdmin\msg.txt
-echo [SUCCESS] Notification sent (CMD): %*
+if %errorlevel% neq 0 (
+    echo [ERROR] Failed to write to C:\RemoteAdmin\msg.txt
+) else (
+    echo [SUCCESS] Notification sent (CMD): %*
+)
 '@
 
-# We only use ASCII here. It is the most stable for CMD.
+# Save using ASCII - this is mandatory for CMD compatibility
 [System.IO.File]::WriteAllLines("C:\Windows\notify.bat", $batContent, [System.Text.Encoding]::ASCII)
 
 # --- 5. CREATE POWERSHELL ALIAS ---

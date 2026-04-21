@@ -55,6 +55,7 @@ $profileDir = Split-Path $PROFILE -Parent
 if (!(Test-Path $profileDir)) { New-Item -Type Directory -Path $profileDir -Force }
 
 # We use a single-quote here-string '@ ... @' so we don't have to escape every $ sign
+# 1. Define the code (Your snippet)
 $functionCode = @'
 
 function notify {
@@ -63,7 +64,6 @@ function notify {
         $RawMessage
     )
     
-    # Join all arguments into a single string
     $msg = $RawMessage -join ' '
     $targetDir = "C:\RemoteAdmin"
     $targetPath = "$targetDir\msg.txt"
@@ -74,12 +74,9 @@ function notify {
     }
 
     try {
-        # Ensure the target directory exists
         if (!(Test-Path $targetDir)) { 
             New-Item -ItemType Directory -Path $targetDir -Force | Out-Null 
-            }
-
-        # Write the file using UTF8 to preserve any special symbols
+        }
         $msg | Set-Content -Path $targetPath -Encoding UTF8
         Write-Host "[SUCCESS] Notification sent: `"$msg`"" -ForegroundColor Green
     }
@@ -88,7 +85,6 @@ function notify {
     }
 }
 '@
-
 # Append to profile instead of overwriting it
 Add-Content -Path $PROFILE -Value $functionCode
 # 6. REGISTER PERMANENT AUTO-START TASK

@@ -1,5 +1,5 @@
 # =================================================================
-# DWShellNotification - FORCE POPUP VERSION
+# DWShellNotification - MODERN TOAST VERSION
 # =================================================================
 
 # 1. CLEANUP
@@ -10,19 +10,34 @@ $dir = "C:\RemoteAdmin"
 if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force }
 icacls $dir /grant "Everyone:(OI)(CI)F" /T | Out-Null
 
-# 3. THE LISTENER (Using Popups instead of Balloon Tips)
+# 3. THE LISTENER (Modern XML Toast)
 $listenerCode = @'
-Add-Type -AssemblyName System.Windows.Forms
+[void][System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
+$trigger = "C:\RemoteAdmin\msg.txt"
+
 while($true) {
-    if (Test-Path "C:\RemoteAdmin\msg.txt") {
+    if (Test-Path $trigger) {
         try {
-            $msg = Get-Content "C:\RemoteAdmin\msg.txt" -Raw -ErrorAction SilentlyContinue
+            $msg = Get-Content $trigger -Raw -ErrorAction SilentlyContinue
             if ($msg) {
-                # This creates a real window that pops up in front of everything
-                [System.Windows.Forms.MessageBox]::Show($msg.Trim(), "Shorix System", [System.Windows.Forms.MessageBoxButtons]::OK, [System.Windows.Forms.MessageBoxIcon]::Information, [System.Windows.Forms.MessageBoxDefaultButton]::Button1, [System.Windows.Forms.MessageBoxOptions]::ServiceNotification)
+                # Load the Windows Toast XML
+                [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+                $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+                
+                # Set the Title and Message
+                $toastTextElements = $template.GetElementsByTagName("text")
+                $toastTextElements[0].AppendChild($template.CreateTextNode("Shorix System")) > $null
+                $toastTextElements[1].AppendChild($template.CreateTextNode($msg.Trim())) > $null
+                
+                # Show it
+                $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+                [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier("PowerShell").Show($toast)
             }
-        } catch {}
-        Remove-Item "C:\RemoteAdmin\msg.txt" -Force -ErrorAction SilentlyContinue
+        } catch {
+            # Fallback to popup if Toast API fails
+            [System.Windows.Forms.MessageBox]::Show($msg, "Shorix System - Fallback")
+        }
+        Remove-Item $trigger -Force -ErrorAction SilentlyContinue
     }
     Start-Sleep -Milliseconds 500
 }
@@ -35,7 +50,13 @@ $profilePath = "$HOME\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.p
 if (!(Test-Path (Split-Path $profilePath))) { New-Item -Type Directory (Split-Path $profilePath) -Force }
 'function notify { $args -join " " > "C:\RemoteAdmin\msg.txt" }' | Set-Content $profilePath -Force
 
-# 5. START
-Start-Process powershell.exe -ArgumentList "-NoProfile -WindowStyle Hidden -File C:\RemoteAdmin\NotificationListener.ps1"
+# 5. START (Using the Interactive principal via Scheduled Task for best Toast support)
+$taskName = "DwShellNotify"
+Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File C:\RemoteAdmin\NotificationListener.ps1"
+$triggerTask = New-ScheduledTaskTrigger -AtLogOn
+$principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $triggerTask -Principal $principal -Force | Out-Null
+Start-ScheduledTask -TaskName $taskName
 
-Write-Host "INSTALL COMPLETE. CLOSE/OPEN SHELL AND TYPE: notify hello" -ForegroundColor Green
+Write-Host "TOAST INSTALLER COMPLETE." -ForegroundColor Green

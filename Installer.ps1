@@ -1,73 +1,55 @@
 # =================================================================
-# DWShellNotification - SIMPLE NUCLEAR INSTALLER
+# DWShellNotification - RECOVERY VERSION
 # =================================================================
 
-# --- 1. THE UNINSTALL (Kill Everything) ---
-Write-Host "Wiping old installation..." -ForegroundColor Cyan
-$taskName = "DwShellNotify"
+# 1. CLEANUP (Kill everything to start fresh)
+Write-Host "Resetting system..." -ForegroundColor Cyan
 $dir = "C:\RemoteAdmin"
-$startupFile = "C:\ProgramData\Microsoft\Windows\Start Menu\Programs\StartUp\StartNotify.vbs"
+$taskName = "DwShellNotify"
 
-# Stop the Scheduled Task
+# Kill old processes
+Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*NotificationListener*" } | Stop-Process -Force
 Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
 
-# Kill any running PowerShell instances of the listener
-Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*NotificationListener*" } | Stop-Process -Force
-
-# Delete the old Startup VBS and the main directory
-if (Test-Path $startupFile) { Remove-Item $startupFile -Force }
-if (Test-Path $dir) { Remove-Item $dir -Recurse -Force -ErrorAction SilentlyContinue }
-if (Test-Path "C:\Windows\notify.bat") { Remove-Item "C:\Windows\notify.bat" -Force }
-
-Write-Host "Cleanup complete. Installing fresh..." -ForegroundColor Green
-
-# --- 2. THE INSTALL (Hard-Coded Paths) ---
-New-Item -ItemType Directory -Path $dir -Force | Out-Null
+# 2. FOLDER SETUP
+if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force }
 icacls $dir /grant "Everyone:(OI)(CI)M" /T | Out-Null
+Remove-Item "$dir\msg.txt" -Force -ErrorAction SilentlyContinue
 
-# --- 3. CREATE THE LISTENER ---
+# 3. THE LISTENER (The code that worked before)
 $listenerContent = @'
 Add-Type -AssemblyName System.Windows.Forms
-$trigger = "C:\RemoteAdmin\msg.txt"
 $n = New-Object System.Windows.Forms.NotifyIcon
-$n.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon("powershell.exe")
+$n.Icon = [System.Drawing.SystemIcons]::Information
 $n.Visible = $True
-
 while($true) {
-    if (Test-Path $trigger) {
+    if (Test-Path "C:\RemoteAdmin\msg.txt") {
         try {
-            $msg = Get-Content $trigger -Raw -ErrorAction SilentlyContinue
+            $msg = Get-Content "C:\RemoteAdmin\msg.txt" -Raw -ErrorAction SilentlyContinue
             if ($msg) {
                 $n.ShowBalloonTip(10000, "Shorix System", $msg.Trim(), "Info")
             }
         } catch {}
-        Remove-Item $trigger -Force -ErrorAction SilentlyContinue
+        Remove-Item "C:\RemoteAdmin\msg.txt" -Force -ErrorAction SilentlyContinue
     }
-    Start-Sleep -Milliseconds 200
+    Start-Sleep -Milliseconds 500
 }
 '@
 Set-Content -Path "$dir\NotificationListener.ps1" -Value $listenerContent -Encoding UTF8
 
-# --- 4. CREATE THE VBS LAUNCHER (No Quote Hell) ---
-# Hard-coding the path here avoids the "Expected end of statement" error
-$vbsContent = 'CreateObject("WScript.Shell").Run "powershell.exe -ExecutionPolicy Bypass -WindowStyle Hidden -File C:\RemoteAdmin\NotificationListener.ps1", 0'
-Set-Content -Path $startupFile -Value $vbsContent
-
-# --- 5. CREATE NOTIFY.BAT ---
-$batContent = @'
-@echo off
-if "%~1"=="" exit /b
-echo %* > "C:\RemoteAdmin\msg.txt"
-'@
+# 4. THE COMMANDS (CMD & PowerShell)
+# CMD Version
+$batContent = "@echo off`nif `"%~1`"==`"`" exit /b`necho %* > `"C:\RemoteAdmin\msg.txt`""
 [System.IO.File]::WriteAllLines("C:\Windows\notify.bat", $batContent, [System.Text.Encoding]::ASCII)
 
-# --- 6. CREATE POWERSHELL PROFILE ALIAS ---
+# PowerShell Version
 $profilePath = "$HOME\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
 if (!(Test-Path (Split-Path $profilePath))) { New-Item -Type Directory (Split-Path $profilePath) -Force }
-Set-Content -Path $profilePath -Value 'function notify { $msg = $args -join " "; $msg > "C:\RemoteAdmin\msg.txt"; Write-Host "[SENT]" -FG Green }' -Force
+Set-Content -Path $profilePath -Value 'function notify { $args -join " " > "C:\RemoteAdmin\msg.txt" }' -Force
 
-# --- 7. FIRE IT UP ---
-# This runs the VBS immediately in the user session
-& wscript.exe $startupFile
+# 5. START THE LISTENER (Manual Start)
+# This runs it immediately so you don't have to reboot
+Start-Process powershell.exe -ArgumentList "-NoProfile -WindowStyle Hidden -File C:\RemoteAdmin\NotificationListener.ps1"
 
-Write-Host "DONE. Open a new shell and type: notify test" -ForegroundColor Green
+Write-Host "RECOVERY COMPLETE." -ForegroundColor Green
+Write-Host "Type 'notify test' to check."

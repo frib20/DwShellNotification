@@ -1,38 +1,4 @@
-# Update-RemoteNotify.ps1
-# 1. Cleans up the old version
-# 2. Pulls the fresh "All-in-One" install from GitHub
-
-$taskName = "AutoRemoteNotify"
-$dir = "C:\RemoteAdmin"
-$batPath = "C:\Windows\notify.bat"
-# Replace the URL below with your actual GitHub Raw URL for the installer
-$installUrl = "https://raw.githubusercontent.com/frib20/DwShellNotification/refs/heads/main/Installer.ps1"
-
-Write-Host "--- Starting Update/Reinstall Process ---" -ForegroundColor Cyan
-
-# --- STEP 1: CLEANUP OLD VERSION ---
-Write-Host "[1/5] Removing existing Scheduled Task..." -ForegroundColor Yellow
-Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
-
-Write-Host "[2/5] Terminating background listener processes..." -ForegroundColor Yellow
-$activeProcs = Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { 
-    $_.CommandLine -like "*$dir\NotificationListener.ps1*" 
-}
-foreach ($proc in $activeProcs) { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue }
-
-Write-Host "[3/5] Wiping old directory and command files..." -ForegroundColor Yellow
-if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
-if (Test-Path $batPath) { Remove-Item -Force $batPath }
-
-# --- STEP 2: INSTALL NEW VERSION ---
-Write-Host "[4/5] Pulling fresh install from GitHub..." -ForegroundColor Cyan
-try {
-    # This downloads the raw code from your GitHub and executes it in memory
-    Invoke-RestMethod -Uri $installUrl | Invoke-Expression
-    Write-Host "[5/5] Fresh installation applied successfully." -ForegroundColor Green
-} catch {
-    Write-Host "[ERROR] Failed to download or execute the installer from GitHub." -ForegroundColor Red
-    Write-Host "Check your URL: $installUrl" -ForegroundColor Gray
-}
-
-Write-Host "`n--- Update Complete! ---" -ForegroundColor Green
+Write-Host "Fetching latest installer..." -ForegroundColor Cyan
+$installerUrl = "https://raw.githubusercontent.com/frib20/DwShellNotification/main/Installer.ps1"
+$code = Invoke-RestMethod -Uri $installerUrl
+Invoke-Expression $code

@@ -1,4 +1,6 @@
 # 1. CLEANUP OLD STUFF
+
+$Name = "DwNotification"
 Write-Host "Cleaning up old tasks and files..." -ForegroundColor Cyan
 $taskName = "AutoRemoteNotify"
 $dir = "C:\RemoteAdmin"
@@ -23,7 +25,7 @@ while(`$true) {
         try {
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
-                `$n.ShowBalloonTip(10000, "Remote Admin", `$message, [System.Windows.Forms.ToolTipIcon]::Info)
+                `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::Info)
             }
         } finally {
             Remove-Item `$triggerFile -Force -ErrorAction SilentlyContinue

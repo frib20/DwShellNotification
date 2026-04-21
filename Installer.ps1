@@ -77,7 +77,7 @@ function notify {
         # Ensure the target directory exists
         if (!(Test-Path $targetDir)) { 
             New-Item -ItemType Directory -Path $targetDir -Force | Out-Null 
-        }
+            }
 
         # Write the file using UTF8 to preserve any special symbols
         $msg | Set-Content -Path $targetPath -Encoding UTF8

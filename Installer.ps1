@@ -1,62 +1,79 @@
-# =================================================================
-# DWShellNotification - DIRECT SESSION JUMP (TRAY ICON FIX)
-# =================================================================
-
-# 1. CLEANUP EVERY OLD VERSION
-Write-Host "Clearing old listeners..." -ForegroundColor Cyan
-Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*NotificationListener*" } | Stop-Process -Force
-Unregister-ScheduledTask -TaskName "DwGuiBridge" -Confirm:$false -ErrorAction SilentlyContinue
-
-# 2. SETUP DIRECTORY
+# 1. CLEANUP OLD STUFF
+Write-Host "Cleaning up old tasks and files..." -ForegroundColor Cyan
+$taskName = "AutoRemoteNotify"
 $dir = "C:\RemoteAdmin"
-if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
+Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Unregister-ScheduledTask -Confirm:$false
+if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
+if (Test-Path "C:\Windows\notify.bat") { Remove-Item -Force "C:\Windows\notify.bat" }
 
-# 3. THE LISTENER (Tray Icon + Bubble)
-$listenerCode = @'
-Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-$trigger = "C:\RemoteAdmin\msg.txt"
+# 2. CREATE FOLDER
+New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
-# Force the tray icon to appear
-$n = New-Object System.Windows.Forms.NotifyIcon
-$n.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon("powershell.exe")
-$n.Text = "Shorix System"
-$n.Visible = $true
+# 3. CREATE THE SMART LISTENER
+# This uses [System.IO.File] to read symbols exactly as they are written
+$listenerContent = @"
+Add-Type -AssemblyName System.Windows.Forms
+`$triggerFile = "$dir\msg.txt"
+`$n = New-Object System.Windows.Forms.NotifyIcon
+`$n.Icon = [System.Drawing.SystemIcons]::Information
+`$n.Visible = `$True
 
-# Show an initial bubble so we know it's alive
-$n.ShowBalloonTip(2000, "Shorix System", "Bridge Connected!", [System.Windows.Forms.ToolTipIcon]::Info)
-
-while($true) {
-    if (Test-Path $trigger) {
-        $msg = Get-Content $trigger -Raw -ErrorAction SilentlyContinue
-        if ($msg) {
-            $n.ShowBalloonTip(5000, "Shorix System", $msg.Trim(), [System.Windows.Forms.ToolTipIcon]::Info)
+while(`$true) {
+    if (Test-Path `$triggerFile) {
+        try {
+            `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
+            if (`$message) {
+                `$n.ShowBalloonTip(10000, "Remote Admin", `$message, [System.Windows.Forms.ToolTipIcon]::Info)
+            }
+        } finally {
+            Remove-Item `$triggerFile -Force -ErrorAction SilentlyContinue
         }
-        Remove-Item $trigger -Force -ErrorAction SilentlyContinue
     }
-    Start-Sleep -Milliseconds 500
+    Start-Sleep -Seconds 1
 }
+"@
+Set-Content -Path "$dir\NotificationListener.ps1" -Value $listenerContent -Encoding UTF8
+
+# 4. CREATE THE UNIVERSAL 'NOTIFY' COMMAND (CMD version)
+# Using delayed expansion to handle symbols like & ^ % ! in CMD
+$batContent = @'
+@echo off
+setlocal enabledelayedexpansion
+set "msg=%*"
+if not defined msg (echo [ERROR] No message provided. & exit /b)
+echo !msg! > C:\RemoteAdmin\msg.txt
+echo [SUCCESS] Notification sent: "!msg!"
+endlocal
 '@
-Set-Content -Path "$dir\NotificationListener.ps1" -Value $listenerCode -Encoding UTF8
+Set-Content -Path "C:\Windows\notify.bat" -Value $batContent
 
-# 4. CREATE COMMANDS
-"@echo off`necho %* > C:\RemoteAdmin\msg.txt" | Set-Content "C:\Windows\notify.bat"
-$profilePath = "$HOME\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
-if (!(Test-Path (Split-Path $profilePath))) { New-Item -Type Directory (Split-Path $profilePath) -Force }
-'function notify { $args -join " " > "C:\RemoteAdmin\msg.txt" }' | Set-Content $profilePath -Force
-
-# 5. THE JUMP (Forcing it into the GUI)
-$activeUser = (Get-WmiObject -Class Win32_ComputerSystem).UserName
-if ($activeUser) {
-    Write-Host "Targeting User: $activeUser" -ForegroundColor Green
-    
-    # We use 'schtasks' directly which is sometimes more reliable than the PS cmdlet
-    $cmd = "powershell.exe -NoProfile -WindowStyle Hidden -File C:\RemoteAdmin\NotificationListener.ps1"
-    schtasks /create /tn "DwGuiBridge" /tr "$cmd" /sc ONLOGON /rl HIGHEST /ru "$activeUser" /f | Out-Null
-    
-    # Run it immediately as that user
-    schtasks /run /tn "DwGuiBridge" | Out-Null
-    
-    Write-Host "BRIDGE INJECTED. Check the tray icon now." -ForegroundColor Green
-} else {
-    Write-Host "ERROR: No logged-in user detected." -ForegroundColor Red
+# 5. CREATE POWERSHELL PROFILE FUNCTION (PowerShell version)
+# This forces PowerShell to treat input as a literal string to avoid parser errors
+$profileDir = Split-Path $PROFILE -Parent
+if (!(Test-Path $profileDir)) { New-Item -Type Directory -Path $profileDir -Force }
+$functionCode = @"
+function notify {
+    param([Parameter(ValueFromRemainingArguments=`$true)]`$RawMessage)
+    `$msg = `$RawMessage -join ' '
+    if (!`$msg) { Write-Host "[ERROR] No message provided." -ForegroundColor Red; return }
+    [System.IO.File]::WriteAllText("$dir\msg.txt", `$msg)
+    Write-Host "[SUCCESS] Notification sent: `"`$msg`"" -ForegroundColor Green
 }
+"@
+Set-Content -Path $PROFILE -Value $functionCode
+
+# 6. REGISTER PERMANENT AUTO-START TASK
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
+$trigger = New-ScheduledTaskTrigger -AtLogOn
+$principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
+
+Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
+Start-ScheduledTask -TaskName $taskName
+
+# 7. REFRESH CURRENT SESSION
+. $PROFILE
+
+Write-Host "`n--- SETUP COMPLETE ---" -ForegroundColor Green
+Write-Host "1. Works in CMD: notify !@#$%^&*()" -ForegroundColor White
+Write-Host "2. Works in PS:  notify '!@#$%^&*()'" -ForegroundColor White
+Write-Host "3. Persists through reboots." -ForegroundColor White

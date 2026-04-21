@@ -1,28 +1,22 @@
 # =================================================================
-# DWShellNotification - MASTER INSTALLER (FIXED)
+# DWShellNotification - THE "TOTAL FIX" INSTALLER
 # =================================================================
 
-# --- 1. PRE-INSTALL CLEANUP ---
-$taskName = "DwShellNotify"
-Write-Host "Cleaning up old processes..." -ForegroundColor Cyan
-Unregister-ScheduledTask -TaskName $taskName -Confirm:$false -ErrorAction SilentlyContinue
-Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*NotificationListener*" } | Stop-Process -Force
-
-# --- 2. LOAD CONFIG ---
-$configUrl = "https://raw.githubusercontent.com/frib20/DwShellNotification/main/Config.ps1"
-try {
-    $configText = Invoke-RestMethod -Uri $configUrl
-    Invoke-Expression $configText
-} catch {
-    $GlobalConfig = @{ Title="System Alert"; ServiceName="DwShellNotify"; Folder="C:\RemoteAdmin"; IconType="Information" }
-}
-
-$dir = $GlobalConfig.Folder
-$title = $GlobalConfig.Title
-$icon = $GlobalConfig.IconType
+# --- 1. SETTINGS & PATHS ---
+$dir = "C:\RemoteAdmin"
+$title = "Shorix System"
+$icon = "Information"
 $scriptPath = "$dir\NotificationListener.ps1"
+$startupPath = "$env:APPDATA\Microsoft\Windows\Start Menu\Programs\Startup\LaunchNotify.vbs"
 
-# --- 3. DIRECTORY & PERMISSIONS ---
+Write-Host "Starting Fresh Install..." -ForegroundColor Cyan
+
+# --- 2. CLEANUP ---
+# Kill any existing listeners and remove the old task
+Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*NotificationListener*" } | Stop-Process -Force
+Unregister-ScheduledTask -TaskName "DwShellNotify" -Confirm:$false -ErrorAction SilentlyContinue
+
+# --- 3. DIRECTORY SETUP ---
 if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 icacls $dir /grant "Everyone:(OI)(CI)M" /T | Out-Null
 Remove-Item "$dir\msg.txt" -Force -ErrorAction SilentlyContinue
@@ -38,55 +32,39 @@ Add-Type -AssemblyName System.Windows.Forms
 while(`$true) {
     if (Test-Path `$trigger) {
         try {
-            # Use FileStream to allow CMD to write while we read
-            `$stream = [System.IO.File]::Open(`$trigger, [System.IO.FileMode]::Open, [System.IO.FileAccess]::Read, [System.IO.FileShare]::ReadWrite)
-            `$reader = New-Object System.IO.StreamReader(`$stream)
-            `$msg = `$reader.ReadToEnd().Trim()
-            `$reader.Close(); `$stream.Close()
-
+            `$msg = Get-Content `$trigger -Raw -ErrorAction SilentlyContinue
             if (`$msg) {
-                `$n.ShowBalloonTip(10000, "$title", `$msg, [System.Windows.Forms.ToolTipIcon]::$icon)
+                `$n.ShowBalloonTip(10000, "$title", `$msg.Trim(), [System.Windows.Forms.ToolTipIcon]::$icon)
             }
         } catch {}
         Remove-Item `$trigger -Force -ErrorAction SilentlyContinue
     }
-    Start-Sleep -Milliseconds 250
+    Start-Sleep -Milliseconds 500
 }
 "@
 Set-Content -Path $scriptPath -Value $listenerContent -Encoding UTF8
 
-# --- 5. CREATE NOTIFY.BAT (For CMD) ---
+# --- 5. CREATE STARTUP LAUNCHER (VBS Trick to hide window) ---
+# This starts the listener in the BACKGROUND without a blue box appearing
+$vbsContent = "CreateObject(`"Wscript.Shell`").Run `"powershell.exe -NoProfile -File `"$scriptPath`"`", 0, True"
+Set-Content -Path $startupPath -Value $vbsContent
+
+# --- 6. CREATE NOTIFY.BAT (For CMD) ---
 $batContent = @"
 @echo off
 if "%~1"=="" exit /b
 (echo.%*) > "$dir\msg.txt"
+echo [SUCCESS] Notification Sent.
 "@
-# ASCII is required for CMD to read the file correctly
 [System.IO.File]::WriteAllLines("C:\Windows\notify.bat", $batContent, [System.Text.Encoding]::ASCII)
 
-# --- 6. CREATE POWERSHELL FUNCTION ---
-$functionCode = @"
-function notify {
-    param([Parameter(ValueFromRemainingArguments=`$true)]`$RawMessage)
-    `$msg = `$RawMessage -join ' '
-    if (!`$msg) { return }
-    [System.IO.File]::WriteAllText("$dir\msg.txt", `$msg)
-    Write-Host "[SUCCESS] Notification sent" -ForegroundColor Green
-}
-"@
+# --- 7. CREATE POWERSHELL ALIAS ---
 $profilePath = "$HOME\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
-$profileDir = Split-Path $profilePath
-if (!(Test-Path $profileDir)) { New-Item -Type Directory $profileDir -Force }
-Set-Content -Path $profilePath -Value $functionCode -Force
+if (!(Test-Path (Split-Path $profilePath))) { New-Item -Type Directory (Split-Path $profilePath) -Force }
+Set-Content -Path $profilePath -Value "function notify { (echo `$args) > '$dir\msg.txt'; Write-Host '[SUCCESS] Notification Sent' -FG Green }" -Force
 
-# --- 7. SCHEDULE TASK (The UI Fix) ---
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$scriptPath"""
-$trigger = New-ScheduledTaskTrigger -AtLogOn
-# 'Interactive' Group is the magic fix for showing UI via DWService
-$principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
+# --- 8. RUN NOW ---
+# Start the listener immediately so you don't have to reboot
+wscript.exe "$startupPath"
 
-Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
-Start-ScheduledTask -TaskName $taskName
-
-Write-Host "--- INSTALLATION COMPLETE ---" -ForegroundColor Green
-Write-Host "Restart your DWService Shell for changes to take effect."
+Write-Host "DONE! Try typing 'notify Test' in the shell now." -ForegroundColor Green

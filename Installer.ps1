@@ -1,5 +1,5 @@
 # =================================================================
-# DWShellNotification - REPAIR VERSION (VBS FIX)
+# DWShellNotification - VBS QUOTE-PROOF VERSION
 # =================================================================
 
 # 1. SETUP & CONFIG
@@ -20,10 +20,10 @@ Write-Host "Cleaning up old processes..." -ForegroundColor Cyan
 Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*NotificationListener*" } | Stop-Process -Force
 
 # 2. DIRECTORY & PERMISSIONS
-if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force }
+if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 icacls $dir /grant "Everyone:(OI)(CI)M" /T | Out-Null
 
-# 3. THE LISTENER (High-Speed Polling)
+# 3. THE LISTENER
 $listenerContent = @"
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -AssemblyName System.Drawing
@@ -44,16 +44,16 @@ while(`$true) {
         } catch {}
         Remove-Item `$trigger -Force -ErrorAction SilentlyContinue
     }
-    # 100ms for instant feel
-    Start-Sleep -Milliseconds 100
+    Start-Sleep -Milliseconds 250
 }
 "@
 Set-Content -Path $scriptPath -Value $listenerContent -Encoding UTF8
 
-# 4. THE STARTUP VBS (FIXED QUOTES)
-# We use '""' to escape quotes properly inside VBScript
-$vbsContent = "CreateObject(`"Wscript.Shell`").Run `"powershell.exe -NoProfile -WindowStyle Hidden -File `"`"$scriptPath`"`"`", 0, True"
-Set-Content -Path $vbsPath -Value $vbsContent
+# 4. THE STARTUP VBS (Bulletproof Concatenation)
+# We build the VBS line by adding the quotes manually to avoid PowerShell escaping bugs
+$q = [char]34
+$vbsLine = 'CreateObject(' + $q + 'Wscript.Shell' + $q + ').Run ' + $q + 'powershell.exe -NoProfile -WindowStyle Hidden -File ' + $q + $q + $scriptPath + $q + $q + $q + ', 0, True'
+Set-Content -Path $vbsPath -Value $vbsLine
 
 # 5. THE NOTIFY.BAT (For CMD)
 $batContent = @"
@@ -73,4 +73,4 @@ Remove-Item "$dir\msg.txt" -ErrorAction SilentlyContinue
 wscript.exe "$vbsPath"
 
 Write-Host "--- REPAIR COMPLETE ---" -ForegroundColor Green
-Write-Host "No more VBS errors. Close/Open your shell and test it!"
+Write-Host "VBS syntax has been hardened. Please check the remote screen now."

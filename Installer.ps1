@@ -1,37 +1,42 @@
 # =================================================================
-# DWShellNotification - THE GUI SHELL BRIDGE (BUBBLE VERSION)
+# DWShellNotification - TOAST ONLY (NO MESSAGEBOX)
 # =================================================================
 
-Write-Host "1. Cleaning up Session 0 ghosts..." -ForegroundColor Cyan
+# 1. CLEANUP
 Get-Process powershell -ErrorAction SilentlyContinue | Where-Object { $_.CommandLine -like "*NotificationListener*" } | Stop-Process -Force
 Unregister-ScheduledTask -TaskName "DwGuiBridge" -Confirm:$false -ErrorAction SilentlyContinue
 
-# Setup the bridge folder
 $dir = "C:\RemoteAdmin"
 if (!(Test-Path $dir)) { New-Item -ItemType Directory -Path $dir -Force | Out-Null }
 icacls $dir /grant "Everyone:(OI)(CI)F" /T | Out-Null
 
-Write-Host "2. Creating Local GUI Listener..." -ForegroundColor Cyan
-# This script will ONLY run in the local graphical shell
+# 2. THE TOAST-ONLY LISTENER
 $listenerCode = @'
-Add-Type -AssemblyName System.Windows.Forms
+[void][System.Reflection.Assembly]::LoadWithPartialName("System.Windows.Forms")
 $trigger = "C:\RemoteAdmin\msg.txt"
-
-# Windows 10/11 REQUIRES an icon to show a bubble notification
-$n = New-Object System.Windows.Forms.NotifyIcon
-$n.Icon = [System.Drawing.Icon]::ExtractAssociatedIcon("C:\Windows\System32\WindowsPowerShell\v1.0\powershell.exe")
-$n.Text = "Shorix Background Bridge"
-$n.Visible = $True
+# Use the official PowerShell AppID to ensure Windows trust
+$appId = "{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe"
 
 while($true) {
     if (Test-Path $trigger) {
-        try {
-            $msg = Get-Content $trigger -Raw -ErrorAction SilentlyContinue
-            if ($msg) {
-                # This is the classic "Bubble" request
-                $n.ShowBalloonTip(10000, "Shorix System", $msg.Trim(), "Info")
+        $msg = Get-Content $trigger -Raw -ErrorAction SilentlyContinue
+        if ($msg) {
+            try {
+                # Setup Windows Toast XML
+                [Windows.UI.Notifications.ToastNotificationManager, Windows.UI.Notifications, ContentType = WindowsRuntime] > $null
+                $template = [Windows.UI.Notifications.ToastNotificationManager]::GetTemplateContent([Windows.UI.Notifications.ToastTemplateType]::ToastText02)
+                
+                $textNodes = $template.GetElementsByTagName("text")
+                $textNodes[0].AppendChild($template.CreateTextNode("Shorix System")) > $null
+                $textNodes[1].AppendChild($template.CreateTextNode($msg.Trim())) > $null
+                
+                $toast = [Windows.UI.Notifications.ToastNotification]::new($template)
+                [Windows.UI.Notifications.ToastNotificationManager]::CreateToastNotifier($appId).Show($toast)
+            } catch {
+                # We do NOTHING here. No MessageBox, no error. 
+                # If it fails, it fails silently.
             }
-        } catch {}
+        }
         Remove-Item $trigger -Force -ErrorAction SilentlyContinue
     }
     Start-Sleep -Milliseconds 500
@@ -39,33 +44,20 @@ while($true) {
 '@
 Set-Content -Path "$dir\NotificationListener.ps1" -Value $listenerCode -Encoding UTF8
 
-Write-Host "3. Creating Shell Commands..." -ForegroundColor Cyan
+# 3. COMMANDS
 "@echo off`necho %* > C:\RemoteAdmin\msg.txt" | Set-Content "C:\Windows\notify.bat"
 $profilePath = "$HOME\Documents\WindowsPowerShell\Microsoft.PowerShell_profile.ps1"
 if (!(Test-Path (Split-Path $profilePath))) { New-Item -Type Directory (Split-Path $profilePath) -Force }
 'function notify { $args -join " " > "C:\RemoteAdmin\msg.txt" }' | Set-Content $profilePath -Force
 
-Write-Host "4. Injecting into Graphical User Interface..." -ForegroundColor Cyan
-# This is the magic. We find the person at the keyboard.
+# 4. GUI INJECTION
 $activeUser = (Get-WmiObject -Class Win32_ComputerSystem).UserName
-
 if ($activeUser) {
-    Write-Host "-> Found active local user: $activeUser" -ForegroundColor Green
-    
-    # We use Task Scheduler to cross the boundary from DWService to the Local Desktop
     $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-WindowStyle Hidden -File C:\RemoteAdmin\NotificationListener.ps1"
-    
-    # Force it into their interactive session
     $principal = New-ScheduledTaskPrincipal -UserId $activeUser -LogonType Interactive
     $triggerTask = New-ScheduledTaskTrigger -AtLogOn
     
     Register-ScheduledTask -TaskName "DwGuiBridge" -Action $action -Principal $principal -Trigger $triggerTask -Force | Out-Null
-    
-    # Start it immediately in their GUI
     Start-ScheduledTask -TaskName "DwGuiBridge"
-    
-    Write-Host "BRIDGE ESTABLISHED. Close/Open your shell and type: notify test" -ForegroundColor Green
-} else {
-    Write-Host "-> ERROR: Could not detect anyone logged into the desktop screen." -ForegroundColor Red
-    Write-Host "-> The bubble needs a screen to draw on. Log into the computer first." -ForegroundColor Yellow
+    Write-Host "CLEAN INSTALL COMPLETE (MessageBox Removed)" -ForegroundColor Green
 }

@@ -29,14 +29,14 @@ $listenerContent = @"
 Add-Type -AssemblyName System.Windows.Forms
 `$triggerFile = "$dir\msg.txt"
 `$n = New-Object System.Windows.Forms.NotifyIcon
-`$n.Icon = [System.Drawing.SystemIcons]::Information
+`$n.Icon = [System.Drawing.SystemIcons]::$Icon
 `$n.Visible = `$True
 
 
 while(`$true) {
     if (Test-Path `$triggerFile) {
         try {
-        $host.ui.RawUI.WindowTitle = “Changed Title”
+        $host.ui.RawUI.WindowTitle = $Title
 
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {

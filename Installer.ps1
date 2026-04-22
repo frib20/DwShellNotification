@@ -32,8 +32,6 @@ Add-Type -AssemblyName System.Windows.Forms
 while(`$true) {
     if (Test-Path `$triggerFile) {
         try {
-        $host.ui.RawUI.WindowTitle = “Changed Title”
-
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
                 `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::$Icon)

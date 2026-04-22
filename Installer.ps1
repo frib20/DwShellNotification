@@ -102,12 +102,9 @@ function notify {
 # Append to profile instead of overwriting it
 Add-Content -Path $PROFILE -Value $functionCode
 # 6. REGISTER PERMANENT AUTO-START TASK
-
-
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
-
+$trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
-
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 Start-ScheduledTask -TaskName $taskName
 

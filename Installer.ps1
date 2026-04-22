@@ -10,8 +10,6 @@ $Title = "Test2"
 
 
 
-
-
 Write-Host "Cleaning up old tasks and files..." -ForegroundColor Cyan
 $taskName = "AutoRemoteNotify"
 $dir = "C:\RemoteAdmin"
@@ -94,9 +92,15 @@ function notify {
 }
 '@
 
+
+
+$ScriptBlock = {
+  
+  $host.ui.RawUI.WindowTitle = $Title
+}
 # 6. REGISTER PERMANENT AUTO-START TASK
 Add-Content -Path $PROFILE -Value $functionCode
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile $ScriptBlock -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null

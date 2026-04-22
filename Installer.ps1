@@ -17,8 +17,7 @@ $listenerContent = @"
 Add-Type -AssemblyName System.Windows.Forms
 `$triggerFile = "$dir\msg.txt"
 `$n = New-Object System.Windows.Forms.NotifyIcon
-`$n.Icon = [System.Drawing.SystemIcons]::Information
-`$n.Visible = `$False
+`$n.Visible = `$True
 
 while(`$true) {
     if (Test-Path `$triggerFile) {

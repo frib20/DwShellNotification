@@ -25,7 +25,7 @@ while(`$true) {
         try {
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
-                `$n.ShowBalloonTip(10000, "$Name", `$message)
+                `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::Info)
             }
         } finally {
             Remove-Item `$triggerFile -Force -ErrorAction SilentlyContinue

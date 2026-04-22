@@ -52,5 +52,5 @@ if (Test-Path $PROFILE) {
     }
 }
 
-Write-Host "`n--- UNINSTALL COMPLETE ---" -ForegroundColor Green
+Write-Host "`n---[ UNINSTALL COMPLETE ]---" -ForegroundColor Green
 Write-Host "All components have been removed. You may need to restart your terminal." -ForegroundColor White

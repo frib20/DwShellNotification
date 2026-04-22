@@ -1,6 +1,14 @@
 # 1. CLEANUP OLD STUFF
-
+#--- [ Variables ] --- 
 $Name = "DwNotification"
+# None, Info, Warning, Error
+$Icon = "None"
+# Notification Title
+$Title = ""
+
+
+
+
 Write-Host "Cleaning up old tasks and files..." -ForegroundColor Cyan
 $taskName = "AutoRemoteNotify"
 $dir = "C:\RemoteAdmin"
@@ -19,13 +27,15 @@ Add-Type -AssemblyName System.Windows.Forms
 `$n = New-Object System.Windows.Forms.NotifyIcon
 `$n.Icon = [System.Drawing.SystemIcons]::Information
 `$n.Visible = `$True
+$host.ui.RawUI.WindowTitle = “Changed Title”
+
 
 while(`$true) {
     if (Test-Path `$triggerFile) {
         try {
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
-                `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::None)
+                `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::$Icon)
             }
         } finally {
             Remove-Item `$triggerFile -Force -ErrorAction SilentlyContinue
@@ -54,8 +64,7 @@ Set-Content -Path "C:\Windows\notify.bat" -Value $batContent
 $profileDir = Split-Path $PROFILE -Parent
 if (!(Test-Path $profileDir)) { New-Item -Type Directory -Path $profileDir -Force }
 
-# We use a single-quote here-string '@ ... @' so we don't have to escape every $ sign
-# 1. Define the code (Your snippet)
+
 $functionCode = @'
 
 function notify {

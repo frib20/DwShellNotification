@@ -104,8 +104,8 @@ Add-Content -Path $PROFILE -Value $functionCode
 # 6. REGISTER PERMANENT AUTO-START TASK
 
 
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
-    -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"" -Title ""$Title""" $trigger = New-ScheduledTaskTrigger -AtLogOn
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
+
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null

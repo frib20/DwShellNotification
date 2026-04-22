@@ -4,7 +4,7 @@ $Name = "DwNotification"
 # None, Info, Warning, Error
 $Icon = "None"
 # Notification Title
-$Title = "" #wip
+$Title = "Hi"
 
 
 
@@ -32,6 +32,8 @@ Add-Type -AssemblyName System.Windows.Forms
 while(`$true) {
     if (Test-Path `$triggerFile) {
         try {
+        $host.ui.RawUI.WindowTitle = “Changed Title”
+
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
                 `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::$Icon)
@@ -99,7 +101,7 @@ Add-Content -Path $PROFILE -Value $functionCode
 
 
 $action = New-ScheduledTaskAction -Execute 'powershell.exe' `
-    -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"" -Title ""$Title""" $trigger = New-ScheduledTaskTrigger -AtLogOn
+    -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"" -Title ""$Title"""$trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
 
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
@@ -108,7 +110,7 @@ Start-ScheduledTask -TaskName $taskName
 # 7. REFRESH CURRENT SESSION
 . $PROFILE
 
-Write-Host "`n---[ SETUP COMPLETE ]---" -ForegroundColor Green
+Write-Host "`n--- SETUP COMPLETE ---" -ForegroundColor Green
 Write-Host "1. Works in CMD: notify !@#$%^&*()" -ForegroundColor White
 Write-Host "2. Works in PS:  notify '!@#$%^&*()'" -ForegroundColor White
 Write-Host "3. Persists through reboots." -ForegroundColor White

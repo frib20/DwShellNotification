@@ -96,7 +96,7 @@ function notify {
 
 # 6. REGISTER PERMANENT AUTO-START TASK
 Add-Content -Path $PROFILE -Value $functionCode
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-Title "hi" -NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null

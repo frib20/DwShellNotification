@@ -16,8 +16,12 @@ Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Unregister
 if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
 if (Test-Path "C:\Windows\notify.bat") { Remove-Item -Force "C:\Windows\notify.bat" }
 
-# 2. CREATE FOLDER
+
+# 2. CREATE FOLDER & CUSTOM ENGINE
 New-Item -ItemType Directory -Path $dir -Force | Out-Null
+
+# Copy PowerShell to a custom named EXE (This changes the "App Name")
+Copy-Item (Get-Command powershell.exe).Source -Destination "$dir\$Title.exe" -Force
 
 # 3. CREATE THE SMART LISTENER
 # This uses [System.IO.File] to read symbols exactly as they are written

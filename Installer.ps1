@@ -4,7 +4,7 @@ $Name = "DwNotification"
 # None, Info, Warning, Error
 $Icon = "None"
 # Notification Title
-$Title = ""
+$Title = "Hi"
 
 
 

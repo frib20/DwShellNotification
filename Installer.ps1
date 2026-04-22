@@ -17,6 +17,7 @@ $listenerContent = @"
 Add-Type -AssemblyName System.Windows.Forms
 `$triggerFile = "$dir\msg.txt"
 `$n = New-Object System.Windows.Forms.NotifyIcon
+`$n.Icon = [System.Drawing.SystemIcons]::Information
 `$n.Visible = `$True
 
 while(`$true) {
@@ -24,7 +25,7 @@ while(`$true) {
         try {
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
-                `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::Info)
+                `$n.ShowBalloonTip(10000, "$Name", `$message)
             }
         } finally {
             Remove-Item `$triggerFile -Force -ErrorAction SilentlyContinue

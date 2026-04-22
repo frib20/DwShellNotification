@@ -16,28 +16,19 @@ Get-ScheduledTask -TaskName $taskName -ErrorAction SilentlyContinue | Unregister
 if (Test-Path $dir) { Remove-Item -Recurse -Force $dir }
 if (Test-Path "C:\Windows\notify.bat") { Remove-Item -Force "C:\Windows\notify.bat" }
 
-
-# 2. CREATE FOLDER & CUSTOM ENGINE
+# 2. CREATE FOLDER
 New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
-# Copy PowerShell to a custom named EXE (This changes the "App Name")
-Copy-Item (Get-Command powershell.exe).Source -Destination "$dir\$Title.exe" -Force
-
 # 3. CREATE THE SMART LISTENER
-# This uses [System.IO.File] to read symbols exactly as they are written
 $listenerContent = @"
 Add-Type -AssemblyName System.Windows.Forms
 `$triggerFile = "$dir\msg.txt"
 `$n = New-Object System.Windows.Forms.NotifyIcon
-`$n.Icon = [System.Drawing.SystemIcons]::$Icon
+`$n.Icon = [System.Drawing.SystemIcons]::Information
 `$n.Visible = `$True
-
-
 while(`$true) {
     if (Test-Path `$triggerFile) {
         try {
-        $host.ui.RawUI.WindowTitle = $Title
-
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
                 `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::$Icon)
@@ -52,7 +43,6 @@ while(`$true) {
 Set-Content -Path "$dir\NotificationListener.ps1" -Value $listenerContent -Encoding UTF8
 
 # 4. CREATE THE UNIVERSAL 'NOTIFY' COMMAND (CMD version)
-# Using delayed expansion to handle symbols like & ^ % ! in CMD
 $batContent = @'
 @echo off
 setlocal enabledelayedexpansion
@@ -64,29 +54,22 @@ endlocal
 '@
 Set-Content -Path "C:\Windows\notify.bat" -Value $batContent
 
-
 # 5. CREATE POWERSHELL PROFILE FUNCTION (PowerShell version)
 $profileDir = Split-Path $PROFILE -Parent
 if (!(Test-Path $profileDir)) { New-Item -Type Directory -Path $profileDir -Force }
-
-
 $functionCode = @'
-
 function notify {
     param(
         [Parameter(ValueFromRemainingArguments = $true)]
         $RawMessage
     )
-    
     $msg = $RawMessage -join ' '
     $targetDir = "C:\RemoteAdmin"
     $targetPath = "$targetDir\msg.txt"
-
     if ([string]::IsNullOrWhiteSpace($msg)) {
         Write-Host "[ERROR] No message provided." -ForegroundColor Red
         return
     }
-
     try {
         if (!(Test-Path $targetDir)) { 
             New-Item -ItemType Directory -Path $targetDir -Force | Out-Null 
@@ -99,15 +82,12 @@ function notify {
     }
 }
 '@
-# Append to profile instead of overwriting it
 Add-Content -Path $PROFILE -Value $functionCode
+
 # 6. REGISTER PERMANENT AUTO-START TASK
-$action = New-ScheduledTaskAction -Execute "$dir\$Name.exe" `
-    -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
-
-$trigger = New-ScheduledTaskTrigger -AtLogOn
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' `
+    -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"" -Title ""$Title"""$trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
-
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 Start-ScheduledTask -TaskName $taskName
 
@@ -122,5 +102,5 @@ Write-Host "`n---[ Paths ] ---" -ForegroundColor White
 Write-Host "Notify Command = C:\Windows\notify.bat" -ForegroundColor White
 Write-Host "Listener = C:\RemoteAdmin\Listener.ps1" -ForegroundColor White
 Write-Host "Messages = C:\RemoteAdmin\msg.txt" -ForegroundColor White
-Write-Host "Folder = C:\RemoteAdmin" -ForegroundColor White
 
+Write-Host "Folder = C:\RemoteAdmin" -ForegroundColor White

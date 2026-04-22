@@ -25,7 +25,7 @@ while(`$true) {
         try {
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
-                `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::Info)
+                `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::None)
             }
         } finally {
             Remove-Item `$triggerFile -Force -ErrorAction SilentlyContinue
@@ -102,3 +102,9 @@ Write-Host "`n--- SETUP COMPLETE ---" -ForegroundColor Green
 Write-Host "1. Works in CMD: notify !@#$%^&*()" -ForegroundColor White
 Write-Host "2. Works in PS:  notify '!@#$%^&*()'" -ForegroundColor White
 Write-Host "3. Persists through reboots." -ForegroundColor White
+Write-Host "`n---[ Paths ] ---" -ForegroundColor White
+Write-Host "Notify Command = C:\Windows\notify.bat" -ForegroundColor White
+Write-Host "Listener = C:\RemoteAdmin\Listener.ps1" -ForegroundColor White
+Write-Host "Messages = C:\RemoteAdmin\msg.txt" -ForegroundColor White
+Write-Host "Folder = C:\RemoteAdmin" -ForegroundColor White
+

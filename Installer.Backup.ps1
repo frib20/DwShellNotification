@@ -1,4 +1,14 @@
-# 1. CLEANUP OLD STUFF
+#--- [ Variables ] ---
+$DisplayName = "DwNotification"
+# None, Info, Warning, Error
+$Icon = "None"
+
+
+
+
+
+
+
 Write-Host "Cleaning up old tasks and files..." -ForegroundColor Cyan
 $taskName = "AutoRemoteNotify"
 $dir = "C:\RemoteAdmin"
@@ -10,8 +20,9 @@ if (Test-Path "C:\Windows\notify.bat") { Remove-Item -Force "C:\Windows\notify.b
 New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
 # 3. CREATE THE SMART LISTENER
-# This uses [System.IO.File] to read symbols exactly as they are written
 $listenerContent = @"
+
+
 Add-Type -AssemblyName System.Windows.Forms
 `$triggerFile = "$dir\msg.txt"
 `$n = New-Object System.Windows.Forms.NotifyIcon
@@ -23,19 +34,19 @@ while(`$true) {
         try {
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
-                `$n.ShowBalloonTip(10000, "Remote Admin", `$message, [System.Windows.Forms.ToolTipIcon]::Info)
+                `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::$Icon)
             }
         } finally {
             Remove-Item `$triggerFile -Force -ErrorAction SilentlyContinue
         }
     }
     Start-Sleep -Seconds 1
+   
 }
 "@
 Set-Content -Path "$dir\NotificationListener.ps1" -Value $listenerContent -Encoding UTF8
 
 # 4. CREATE THE UNIVERSAL 'NOTIFY' COMMAND (CMD version)
-# Using delayed expansion to handle symbols like & ^ % ! in CMD
 $batContent = @'
 @echo off
 setlocal enabledelayedexpansion
@@ -47,33 +58,61 @@ endlocal
 '@
 Set-Content -Path "C:\Windows\notify.bat" -Value $batContent
 
+
 # 5. CREATE POWERSHELL PROFILE FUNCTION (PowerShell version)
-# This forces PowerShell to treat input as a literal string to avoid parser errors
 $profileDir = Split-Path $PROFILE -Parent
 if (!(Test-Path $profileDir)) { New-Item -Type Directory -Path $profileDir -Force }
-$functionCode = @"
+$functionCode = @'
+
 function notify {
-    param([Parameter(ValueFromRemainingArguments=`$true)]`$RawMessage)
-    `$msg = `$RawMessage -join ' '
-    if (!`$msg) { Write-Host "[ERROR] No message provided." -ForegroundColor Red; return }
-    [System.IO.File]::WriteAllText("$dir\msg.txt", `$msg)
-    Write-Host "[SUCCESS] Notification sent: `"`$msg`"" -ForegroundColor Green
+    param(
+        [Parameter(ValueFromRemainingArguments = $true)]
+        $RawMessage
+    )
+    
+    $msg = $RawMessage -join ' '
+    $targetDir = "C:\RemoteAdmin"
+    $targetPath = "$targetDir\msg.txt"
+
+    if ([string]::IsNullOrWhiteSpace($msg)) {
+        Write-Host "[ERROR] No message provided." -ForegroundColor Red
+        return
+    }
+
+    try {
+        if (!(Test-Path $targetDir)) { 
+            New-Item -ItemType Directory -Path $targetDir -Force | Out-Null 
+        }
+        $msg | Set-Content -Path $targetPath -Encoding UTF8
+        Write-Host "[SUCCESS] Notification sent: `"$msg`"" -ForegroundColor Green
+    }
+    catch {
+        Write-Host "[ERROR] Failed to write notification: $($_.Exception.Message)" -ForegroundColor Red
+    }
 }
-"@
-Set-Content -Path $PROFILE -Value $functionCode
+'@
+
+
+
+
 
 # 6. REGISTER PERMANENT AUTO-START TASK
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
+Add-Content -Path $PROFILE -Value $functionCode
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile  -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
-
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 Start-ScheduledTask -TaskName $taskName
 
 # 7. REFRESH CURRENT SESSION
 . $PROFILE
 
-Write-Host "`n--- SETUP COMPLETE ---" -ForegroundColor Green
+Write-Host "`n---[ SETUP COMPLETE ]---" -ForegroundColor Green
 Write-Host "1. Works in CMD: notify !@#$%^&*()" -ForegroundColor White
 Write-Host "2. Works in PS:  notify '!@#$%^&*()'" -ForegroundColor White
 Write-Host "3. Persists through reboots." -ForegroundColor White
+Write-Host "`n---[ Paths ]---" -ForegroundColor White
+Write-Host "Notify Command = C:\Windows\notify.bat" -ForegroundColor White
+Write-Host "Listener = C:\RemoteAdmin\Listener.ps1" -ForegroundColor White
+Write-Host "Messages = C:\RemoteAdmin\msg.txt" -ForegroundColor White
+Write-Host "Folder = C:\RemoteAdmin" -ForegroundColor White

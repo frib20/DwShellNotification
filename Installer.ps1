@@ -3,6 +3,8 @@ $DisplayName = "DwNotification"
 # None, Info, Warning, Error
 $Icon = "None"
 
+$Title = "Test2"
+
 
 
 
@@ -22,7 +24,7 @@ New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
 # 3. CREATE THE SMART LISTENER
 $listenerContent = @"
-$host.ui.RawUI.WindowTitle = “Changed Title”
+
 Add-Type -AssemblyName System.Windows.Forms
 `$triggerFile = "$dir\msg.txt"
 `$n = New-Object System.Windows.Forms.NotifyIcon
@@ -41,6 +43,7 @@ while(`$true) {
         }
     }
     Start-Sleep -Seconds 1
+   
 }
 "@
 Set-Content -Path "$dir\NotificationListener.ps1" -Value $listenerContent -Encoding UTF8

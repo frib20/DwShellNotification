@@ -22,6 +22,7 @@ New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
 # 3. CREATE THE SMART LISTENER
 $listenerContent = @"
+$host.ui.RawUI.WindowTitle = "hi"
 
 Add-Type -AssemblyName System.Windows.Forms
 `$triggerFile = "$dir\msg.txt"
@@ -94,16 +95,11 @@ function notify {
 
 
 
-$ScriptBlock = {
- $name='New Name '
-  #$Title = "C:\PortQryV2\readme.txt"
-  $host.ui.RawUI.WindowTitle = $name
-}
 
 
 # 6. REGISTER PERMANENT AUTO-START TASK
 Add-Content -Path $PROFILE -Value $functionCode
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile  -WindowStyle Hidden -File ""$dir\NotificationListener.ps1" -ArgumentList "$ScriptBlock"""
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile  -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null

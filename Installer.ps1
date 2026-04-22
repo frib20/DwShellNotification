@@ -1,10 +1,11 @@
-# 1. CLEANUP OLD STUFF
-#--- [ Variables ] --- 
-$Name = "DwNotification"
+#--- [ Variables ] ---
+$DisplayName = "DwNotification"
 # None, Info, Warning, Error
 $Icon = "None"
-# Notification Title
-$Title = ""
+
+
+
+
 
 
 
@@ -20,23 +21,20 @@ if (Test-Path "C:\Windows\notify.bat") { Remove-Item -Force "C:\Windows\notify.b
 New-Item -ItemType Directory -Path $dir -Force | Out-Null
 
 # 3. CREATE THE SMART LISTENER
-# This uses [System.IO.File] to read symbols exactly as they are written
 $listenerContent = @"
+$host.ui.RawUI.WindowTitle = “Changed Title”
 Add-Type -AssemblyName System.Windows.Forms
 `$triggerFile = "$dir\msg.txt"
 `$n = New-Object System.Windows.Forms.NotifyIcon
 `$n.Icon = [System.Drawing.SystemIcons]::Information
 `$n.Visible = `$True
 
-
 while(`$true) {
     if (Test-Path `$triggerFile) {
         try {
-        $host.ui.RawUI.WindowTitle = “Changed Title”
-
             `$message = [System.IO.File]::ReadAllText(`$triggerFile).Trim()
             if (`$message) {
-                `$n.ShowBalloonTip(10000, "$Name", `$message, [System.Windows.Forms.ToolTipIcon]::$Icon)
+                `$n.ShowBalloonTip(10000, "$DisplayName", `$message, [System.Windows.Forms.ToolTipIcon]::$DisplayName)
             }
         } finally {
             Remove-Item `$triggerFile -Force -ErrorAction SilentlyContinue
@@ -48,7 +46,6 @@ while(`$true) {
 Set-Content -Path "$dir\NotificationListener.ps1" -Value $listenerContent -Encoding UTF8
 
 # 4. CREATE THE UNIVERSAL 'NOTIFY' COMMAND (CMD version)
-# Using delayed expansion to handle symbols like & ^ % ! in CMD
 $batContent = @'
 @echo off
 setlocal enabledelayedexpansion
@@ -64,8 +61,6 @@ Set-Content -Path "C:\Windows\notify.bat" -Value $batContent
 # 5. CREATE POWERSHELL PROFILE FUNCTION (PowerShell version)
 $profileDir = Split-Path $PROFILE -Parent
 if (!(Test-Path $profileDir)) { New-Item -Type Directory -Path $profileDir -Force }
-
-
 $functionCode = @'
 
 function notify {
@@ -95,24 +90,23 @@ function notify {
     }
 }
 '@
-# Append to profile instead of overwriting it
-Add-Content -Path $PROFILE -Value $functionCode
+
 # 6. REGISTER PERMANENT AUTO-START TASK
-$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
+Add-Content -Path $PROFILE -Value $functionCode
+$action = New-ScheduledTaskAction -Execute 'powershell.exe' -Argument "-Title "hi" -NoProfile -WindowStyle Hidden -File ""$dir\NotificationListener.ps1"""
 $trigger = New-ScheduledTaskTrigger -AtLogOn
 $principal = New-ScheduledTaskPrincipal -GroupId "Interactive" -RunLevel Highest
-
 Register-ScheduledTask -TaskName $taskName -Action $action -Trigger $trigger -Principal $principal -Force | Out-Null
 Start-ScheduledTask -TaskName $taskName
 
 # 7. REFRESH CURRENT SESSION
 . $PROFILE
 
-Write-Host "`n--- SETUP COMPLETE ---" -ForegroundColor Green
+Write-Host "`n---[ SETUP COMPLETE ]---" -ForegroundColor Green
 Write-Host "1. Works in CMD: notify !@#$%^&*()" -ForegroundColor White
 Write-Host "2. Works in PS:  notify '!@#$%^&*()'" -ForegroundColor White
 Write-Host "3. Persists through reboots." -ForegroundColor White
-Write-Host "`n---[ Paths ] ---" -ForegroundColor White
+Write-Host "`n---[ Paths ]---" -ForegroundColor White
 Write-Host "Notify Command = C:\Windows\notify.bat" -ForegroundColor White
 Write-Host "Listener = C:\RemoteAdmin\Listener.ps1" -ForegroundColor White
 Write-Host "Messages = C:\RemoteAdmin\msg.txt" -ForegroundColor White
